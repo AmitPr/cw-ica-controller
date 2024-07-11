@@ -142,12 +142,14 @@ impl IcaMetadata {
     }
 }
 
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for IcaMetadata {
     fn to_string(&self) -> String {
         serde_json_wasm::to_string(self).unwrap()
     }
 }
 
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for TxEncoding {
     fn to_string(&self) -> String {
         serde_json_wasm::to_string(self).unwrap()
