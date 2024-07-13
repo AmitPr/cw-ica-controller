@@ -188,12 +188,14 @@ mod ibc_channel_open {
 
         // make callback if needed
         if let Some(callback_address) = state.callback_address {
+            let callback = state::CHANNEL_OPEN_ACK_CALLBACK.load(deps.storage)?;
+            state::CHANNEL_OPEN_ACK_CALLBACK.remove(deps.storage);
             let callback_msg = IcaControllerCallbackMsg::OnChannelOpenAckCallback {
                 channel,
                 ica_address: metadata.address,
                 tx_encoding: metadata.encoding,
             }
-            .into_cosmos_msg(callback_address)?;
+            .into_cosmos_msg(callback_address, callback)?;
 
             Ok(IbcBasicResponse::default().add_message(callback_msg))
         } else {

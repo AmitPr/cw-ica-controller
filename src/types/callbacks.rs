@@ -65,8 +65,7 @@ impl IcaControllerCallbackMsg {
     ///
     /// This function returns an error if the message cannot be serialized.
     pub fn into_json_binary(self) -> StdResult<Binary> {
-        let msg = ReceiverExecuteMsg::ReceiveIcaCallback(self);
-        to_json_binary(&msg)
+        to_json_binary(&self)
     }
 
     /// `into_cosmos_msg` converts this message into a [`CosmosMsg`] message to be sent to
@@ -75,13 +74,21 @@ impl IcaControllerCallbackMsg {
     /// # Errors
     ///
     /// This function returns an error if the message cannot be serialized.
-    pub fn into_cosmos_msg<C>(self, contract_addr: impl Into<String>) -> StdResult<CosmosMsg<C>>
+    pub fn into_cosmos_msg<C>(
+        self,
+        contract_addr: impl Into<String>,
+        callback: Binary,
+    ) -> StdResult<CosmosMsg<C>>
     where
         C: Clone + std::fmt::Debug + PartialEq,
     {
+        let msg = ReceiverExecuteMsg::Callback {
+            data: self.into_json_binary()?,
+            callback,
+        };
         let execute = WasmMsg::Execute {
             contract_addr: contract_addr.into(),
-            msg: self.into_json_binary()?,
+            msg: to_json_binary(&msg)?,
             funds: vec![],
         };
 
@@ -93,5 +100,5 @@ impl IcaControllerCallbackMsg {
 /// The actual receiver should include this variant in the larger ExecuteMsg enum
 #[cw_serde]
 enum ReceiverExecuteMsg {
-    ReceiveIcaCallback(IcaControllerCallbackMsg),
+    Callback { data: Binary, callback: Binary },
 }

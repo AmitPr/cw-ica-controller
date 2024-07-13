@@ -1,6 +1,6 @@
 //! This module handles the execution logic of the contract.
 
-use cosmwasm_std::{entry_point, Reply};
+use cosmwasm_std::{entry_point, Reply, SubMsgResult};
 use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 
 use crate::ibc::types::stargate::channel::new_ica_channel_open_init_cosmos_msg;
@@ -60,7 +60,8 @@ pub fn execute(
     match msg {
         ExecuteMsg::CreateChannel {
             channel_open_init_options,
-        } => execute::create_channel(deps, env, info, channel_open_init_options),
+            callback,
+        } => execute::create_channel(deps, env, info, channel_open_init_options, callback),
         ExecuteMsg::CloseChannel {} => execute::close_channel(deps, info),
         ExecuteMsg::UpdateCallbackAddress { callback_address } => {
             execute::update_callback_address(deps, info, callback_address)
@@ -70,6 +71,7 @@ pub fn execute(
             queries,
             packet_memo,
             timeout_seconds,
+            callback,
         } => execute::send_cosmos_msgs(
             deps,
             env,
@@ -78,6 +80,7 @@ pub fn execute(
             queries,
             packet_memo,
             timeout_seconds,
+            callback,
         ),
         ExecuteMsg::UpdateOwnership(action) => execute::update_ownership(deps, env, info, action),
     }
@@ -86,10 +89,40 @@ pub fn execute(
 /// Handles the replies to the submessages.
 #[entry_point]
 #[allow(clippy::pedantic)]
-pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
-    match msg.id {
-        keys::reply_ids::SEND_QUERY_PACKET => reply::send_query_packet(deps, env, msg.result),
-        _ => Err(ContractError::UnknownReplyId(msg.id)),
+pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> Result<Response, ContractError> {
+    match msg.result {
+        SubMsgResult::Ok(resp) => {
+            #[allow(deprecated)]
+            let sequence = anybuf::Bufany::deserialize(&resp.data.unwrap_or_default())?
+                .uint64(1)
+                .unwrap();
+            let channel_id = state::STATE.load(deps.storage)?.get_ica_info()?.channel_id;
+
+            let callback_binary = state::CACHED_CALLBACK.load(deps.storage)?;
+            state::CACHED_CALLBACK.remove(deps.storage);
+            state::PENDING_PACKETS.save(
+                deps.storage,
+                (channel_id.as_str(), sequence),
+                &callback_binary,
+            )?;
+
+            match msg.id {
+                keys::reply_ids::SEND_QUERY_PACKET => {
+                    let query_paths = state::QUERY.load(deps.storage)?;
+
+                    state::QUERY.remove(deps.storage);
+                    state::PENDING_QUERIES.save(
+                        deps.storage,
+                        (&channel_id, sequence),
+                        &query_paths,
+                    )?;
+
+                    Ok(Response::default())
+                }
+                _ => Err(ContractError::UnknownReplyId(msg.id)),
+            }
+        }
+        SubMsgResult::Err(err) => unreachable!("query packet failed: {err}"),
     }
 }
 
@@ -119,7 +152,7 @@ pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, C
 }
 
 mod execute {
-    use cosmwasm_std::{CosmosMsg, IbcMsg, SubMsg};
+    use cosmwasm_std::{Binary, CosmosMsg, IbcMsg, SubMsg};
 
     use crate::{ibc::types::packet::IcaPacketData, types::msg::options::ChannelOpenInitOptions};
 
@@ -139,6 +172,7 @@ mod execute {
         env: Env,
         info: MessageInfo,
         options: Option<ChannelOpenInitOptions>,
+        callback: Binary,
     ) -> Result<Response, ContractError> {
         cw_ownable::assert_owner(deps.storage, &info.sender)?;
 
@@ -152,6 +186,7 @@ mod execute {
         };
 
         state::ALLOW_CHANNEL_OPEN_INIT.save(deps.storage, &true)?;
+        state::CHANNEL_OPEN_ACK_CALLBACK.save(deps.storage, &callback)?;
 
         let ica_channel_open_init_msg = new_ica_channel_open_init_cosmos_msg(
             env.contract.address.to_string(),
@@ -189,6 +224,7 @@ mod execute {
 
     /// Sends an array of [`CosmosMsg`] to the ICA host.
     #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::too_many_arguments)]
     pub fn send_cosmos_msgs(
         deps: DepsMut,
         env: Env,
@@ -197,8 +233,11 @@ mod execute {
         queries: Vec<QueryRequest<Empty>>,
         packet_memo: Option<String>,
         timeout_seconds: Option<u64>,
+        callback: Binary,
     ) -> Result<Response, ContractError> {
         cw_ownable::assert_owner(deps.storage, &info.sender)?;
+
+        state::CACHED_CALLBACK.save(deps.storage, &callback)?;
 
         let contract_state = state::STATE.load(deps.storage)?;
         let ica_info = contract_state.get_ica_info()?;
@@ -258,37 +297,6 @@ mod execute {
         state::STATE.save(deps.storage, &contract_state)?;
 
         Ok(Response::default())
-    }
-}
-
-mod reply {
-    use cosmwasm_std::SubMsgResult;
-
-    use super::{state, ContractError, DepsMut, Env, Response};
-
-    /// Handles the reply to the query packet.
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn send_query_packet(
-        deps: DepsMut,
-        _env: Env,
-        result: SubMsgResult,
-    ) -> Result<Response, ContractError> {
-        match result {
-            SubMsgResult::Ok(resp) => {
-                #[allow(deprecated)]
-                let sequence = anybuf::Bufany::deserialize(&resp.data.unwrap_or_default())?
-                    .uint64(1)
-                    .unwrap();
-                let channel_id = state::STATE.load(deps.storage)?.get_ica_info()?.channel_id;
-                let query_paths = state::QUERY.load(deps.storage)?;
-
-                state::QUERY.remove(deps.storage);
-                state::PENDING_QUERIES.save(deps.storage, (&channel_id, sequence), &query_paths)?;
-
-                Ok(Response::default())
-            }
-            SubMsgResult::Err(err) => unreachable!("query packet failed: {err}"),
-        }
     }
 }
 
@@ -354,14 +362,14 @@ mod tests {
     use crate::types::msg::options::ChannelOpenInitOptions;
 
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Api, StdError, SubMsg};
 
     #[test]
     fn test_instantiate() {
         let mut deps = mock_dependencies();
         let env = mock_env();
-        let info = mock_info("creator", &[]);
+        let info = message_info(&deps.api.addr_make("creator"), &[]);
 
         let channel_open_init_options = ChannelOpenInitOptions {
             connection_id: "connection-0".to_string(),
@@ -417,7 +425,7 @@ mod tests {
         let mut deps = mock_dependencies();
 
         let env = mock_env();
-        let info = mock_info("creator", &[]);
+        let info = message_info(&deps.api.addr_make("creator"), &[]);
 
         let channel_open_init_options = ChannelOpenInitOptions {
             connection_id: "connection-0".to_string(),
@@ -455,7 +463,7 @@ mod tests {
         );
 
         // Ensure a non-admin cannot update the callback address
-        let info = mock_info("non-admin", &[]);
+        let info = message_info(&deps.api.addr_make("non-admin"), &[]);
         let msg = ExecuteMsg::UpdateCallbackAddress {
             callback_address: Some("new_callback_address".to_string()),
         };
@@ -473,7 +481,7 @@ mod tests {
     fn test_migrate() {
         let mut deps = mock_dependencies();
 
-        let info = mock_info("creator", &[]);
+        let info = message_info(&deps.api.addr_make("creator"), &[]);
 
         let channel_open_init_options = ChannelOpenInitOptions {
             connection_id: "connection-0".to_string(),
@@ -527,7 +535,7 @@ mod tests {
     fn test_migrate_with_encoding() {
         let mut deps = mock_dependencies();
 
-        let info = mock_info("creator", &[]);
+        let info = message_info(&deps.api.addr_make("creator"), &[]);
 
         let channel_open_init_options = ChannelOpenInitOptions {
             connection_id: "connection-0".to_string(),

@@ -3,7 +3,7 @@
 //! This module defines the messages that this contract receives.
 
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::CosmosMsg;
+use cosmwasm_std::{Binary, CosmosMsg};
 
 /// The message to instantiate the ICA controller contract.
 #[cw_serde]
@@ -35,6 +35,8 @@ pub enum ExecuteMsg {
         /// If not specified, the options specified in the last channel creation are used.
         #[serde(skip_serializing_if = "Option::is_none")]
         channel_open_init_options: Option<options::ChannelOpenInitOptions>,
+        /// Callback payload to include with the ack callback, if the channel is successfully opened.
+        callback: Binary,
     },
     /// `CloseChannel` closes the IBC channel.
     CloseChannel {},
@@ -60,6 +62,8 @@ pub enum ExecuteMsg {
         /// If not specified, the [default timeout](crate::ibc::types::packet::DEFAULT_TIMEOUT_SECONDS) is used.
         #[serde(skip_serializing_if = "Option::is_none")]
         timeout_seconds: Option<u64>,
+        /// Callback payload to include with the ibc packet.
+        callback: Binary,
     },
     /// `UpdateCallbackAddress` updates the contract callback address.
     UpdateCallbackAddress {

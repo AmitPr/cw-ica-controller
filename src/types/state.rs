@@ -1,7 +1,7 @@
 //! This module defines the state storage of the Contract.
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, IbcChannel};
+use cosmwasm_std::{Addr, Binary, IbcChannel};
 use cw_storage_plus::Item;
 
 use super::{msg::options::ChannelOpenInitOptions, ContractError};
@@ -25,6 +25,9 @@ pub const CHANNEL_OPEN_INIT_OPTIONS: Item<ChannelOpenInitOptions> =
 /// Used to prevent relayers from opening channels. This right is reserved to the contract.
 pub const ALLOW_CHANNEL_OPEN_INIT: Item<bool> = Item::new("allow_channel_open_init");
 
+/// The item used to store the channel open ack callback as a Binary.
+pub const CHANNEL_OPEN_ACK_CALLBACK: Item<Binary> = Item::new("channel_open_ack_callback");
+
 /// The item used to store whether or not channel close init is allowed.
 /// Used to prevent relayers from closing channels. This right is reserved to the contract.
 pub const ALLOW_CHANNEL_CLOSE_INIT: Item<bool> = Item::new("allow_channel_close_init");
@@ -40,6 +43,14 @@ pub const QUERY: Item<Vec<(String, bool)>> = Item::new("pending_query");
 #[cfg(feature = "query")]
 pub const PENDING_QUERIES: cw_storage_plus::Map<(&str, u64), Vec<(String, bool)>> =
     cw_storage_plus::Map::new("pending_queries");
+
+/// `CACHED_CALLBACK` is the cached callback binary, used to store the callback binary before the packet sequence is known.
+pub const CACHED_CALLBACK: Item<Binary> = Item::new("cached_callback");
+
+/// `PENDING_PACKETS` is the map of pending packets.
+/// It maps `channel_id`, and sequence to a callback binary
+pub const PENDING_PACKETS: cw_storage_plus::Map<(&str, u64), Binary> =
+    cw_storage_plus::Map::new("pending_packets");
 
 mod contract {
     use crate::ibc::types::metadata::TxEncoding;

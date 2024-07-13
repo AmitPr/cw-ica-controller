@@ -111,6 +111,9 @@ mod ibc_packet_ack {
             .transpose()?;
 
         state::PENDING_QUERIES.remove(deps.storage, (&packet.src.channel_id, packet.sequence));
+        let callback =
+            state::PENDING_PACKETS.load(deps.storage, (&packet.src.channel_id, packet.sequence))?;
+        state::PENDING_PACKETS.remove(deps.storage, (&packet.src.channel_id, packet.sequence));
 
         if let Some(contract_addr) = state::STATE.load(deps.storage)?.callback_address {
             let callback_msg = IcaControllerCallbackMsg::OnAcknowledgementPacketCallback {
@@ -119,7 +122,7 @@ mod ibc_packet_ack {
                 relayer,
                 query_result,
             }
-            .into_cosmos_msg(contract_addr)?;
+            .into_cosmos_msg(contract_addr, callback)?;
 
             Ok(IbcBasicResponse::default()
                 .add_message(callback_msg)
@@ -142,13 +145,17 @@ mod ibc_packet_ack {
         let error_event = events::packet_ack::error(&packet, &err);
 
         if let Some(contract_addr) = state.callback_address {
+            let callback = state::PENDING_PACKETS
+                .load(deps.storage, (&packet.src.channel_id, packet.sequence))?;
+            state::PENDING_PACKETS.remove(deps.storage, (&packet.src.channel_id, packet.sequence));
+
             let callback_msg = IcaControllerCallbackMsg::OnAcknowledgementPacketCallback {
                 ica_acknowledgement: AcknowledgementData::Error(err.clone()),
                 original_packet: packet,
                 relayer,
                 query_result: Some(query_msg::IcaQueryResult::Error(err)),
             }
-            .into_cosmos_msg(contract_addr)?;
+            .into_cosmos_msg(contract_addr, callback)?;
 
             Ok(IbcBasicResponse::default()
                 .add_message(callback_msg)
@@ -178,11 +185,15 @@ mod ibc_packet_timeout {
         state::PENDING_QUERIES.remove(deps.storage, (&packet.src.channel_id, packet.sequence));
 
         if let Some(contract_addr) = state.callback_address {
+            let callback = state::PENDING_PACKETS
+                .load(deps.storage, (&packet.src.channel_id, packet.sequence))?;
+            state::PENDING_PACKETS.remove(deps.storage, (&packet.src.channel_id, packet.sequence));
+
             let callback_msg = IcaControllerCallbackMsg::OnTimeoutPacketCallback {
                 original_packet: packet,
                 relayer,
             }
-            .into_cosmos_msg(contract_addr)?;
+            .into_cosmos_msg(contract_addr, callback)?;
 
             Ok(IbcBasicResponse::default().add_message(callback_msg))
         } else {
