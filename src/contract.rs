@@ -174,7 +174,13 @@ mod execute {
         options: Option<ChannelOpenInitOptions>,
         callback: Binary,
     ) -> Result<Response, ContractError> {
-        cw_ownable::assert_owner(deps.storage, &info.sender)?;
+        cw_ownable::assert_owner(deps.storage, &info.sender).or_else(|_| {
+            if Some(info.sender) == state::STATE.load(deps.storage)?.callback_address {
+                Ok(())
+            } else {
+                Err(ContractError::Unauthorized)
+            }
+        })?;
 
         let options = if let Some(new_options) = options {
             state::CHANNEL_OPEN_INIT_OPTIONS.save(deps.storage, &new_options)?;
@@ -203,7 +209,13 @@ mod execute {
     /// Submits a [`IbcMsg::CloseChannel`].
     #[allow(clippy::needless_pass_by_value)]
     pub fn close_channel(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
-        cw_ownable::assert_owner(deps.storage, &info.sender)?;
+        cw_ownable::assert_owner(deps.storage, &info.sender).or_else(|_| {
+            if Some(info.sender) == state::STATE.load(deps.storage)?.callback_address {
+                Ok(())
+            } else {
+                Err(ContractError::Unauthorized)
+            }
+        })?;
 
         let channel_state = state::CHANNEL_STATE.load(deps.storage)?;
         if !channel_state.is_open() {
@@ -235,11 +247,17 @@ mod execute {
         timeout_seconds: Option<u64>,
         callback: Binary,
     ) -> Result<Response, ContractError> {
-        cw_ownable::assert_owner(deps.storage, &info.sender)?;
+        let contract_state = state::STATE.load(deps.storage)?;
+        cw_ownable::assert_owner(deps.storage, &info.sender).or_else(|_| {
+            if Some(info.sender) == contract_state.callback_address {
+                Ok(())
+            } else {
+                Err(ContractError::Unauthorized)
+            }
+        })?;
 
         state::CACHED_CALLBACK.save(deps.storage, &callback)?;
 
-        let contract_state = state::STATE.load(deps.storage)?;
         let ica_info = contract_state.get_ica_info()?;
         let has_queries = !queries.is_empty();
 
