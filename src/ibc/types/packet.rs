@@ -265,6 +265,16 @@ pub mod acknowledgement {
                 msg_resp.value.as_slice(),
             )?)
         }
+
+        /// `is_ok` returns true if the acknowledgement is a result.
+        pub fn is_ok(&self) -> bool {
+            matches!(self, Self::Result(_))
+        }
+
+        /// `is_err` returns true if the acknowledgement is an error.
+        pub fn is_err(&self) -> bool {
+            matches!(self, Self::Error(_))
+        }
     }
 }
 
