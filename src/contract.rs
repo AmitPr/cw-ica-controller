@@ -327,8 +327,8 @@ mod query {
     }
 
     /// Returns the saved channel state if it exists.
-    pub fn channel(deps: Deps) -> StdResult<ChannelState> {
-        state::CHANNEL_STATE.load(deps.storage)
+    pub fn channel(deps: Deps) -> StdResult<Option<ChannelState>> {
+        state::CHANNEL_STATE.may_load(deps.storage)
     }
 }
 

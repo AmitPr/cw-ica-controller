@@ -267,12 +267,14 @@ pub mod acknowledgement {
         }
 
         /// `is_ok` returns true if the acknowledgement is a result.
-        pub fn is_ok(&self) -> bool {
+        #[must_use]
+        pub const fn is_ok(&self) -> bool {
             matches!(self, Self::Result(_))
         }
 
         /// `is_err` returns true if the acknowledgement is an error.
-        pub fn is_err(&self) -> bool {
+        #[must_use]
+        pub const fn is_err(&self) -> bool {
             matches!(self, Self::Error(_))
         }
     }

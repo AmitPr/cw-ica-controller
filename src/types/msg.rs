@@ -80,7 +80,7 @@ pub enum ExecuteMsg {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     /// GetChannel returns the IBC channel info.
-    #[returns(crate::types::state::ChannelState)]
+    #[returns(Option<crate::types::state::ChannelState>)]
     GetChannel {},
     /// GetContractState returns the contact's state.
     #[returns(crate::types::state::ContractState)]

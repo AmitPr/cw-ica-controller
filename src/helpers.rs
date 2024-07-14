@@ -198,7 +198,7 @@ impl<'a> CwIcaControllerContractQuerier<'a> {
     /// # Errors
     ///
     /// This function returns an error if the query fails
-    pub fn get_channel(&self) -> StdResult<state::ChannelState> {
+    pub fn get_channel(&self) -> StdResult<Option<state::ChannelState>> {
         self.querier
             .query_wasm_smart(&self.addr, &msg::QueryMsg::GetChannel {})
     }
