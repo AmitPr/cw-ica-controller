@@ -10,8 +10,11 @@ pub const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// This module contains [`cosmwasm_std::SubMsg`] reply ids.
 pub mod reply_ids {
-    /// `SEND_QUERY_PACKET` is the reply id for a packet sent using
+    /// `SEND_PACKET` is the reply id for a packet sent using
     /// [`crate::types::msg::ExecuteMsg::SendQueryMsgs`]
+    pub const SEND_PACKET: u64 = 0;
+    /// `SEND_QUERY_PACKET` is the reply id for a packet sent using
+    /// [`crate::types::msg::ExecuteMsg::SendQueryMsgs`] with the `query` feature enabled.
     #[cfg(feature = "query")]
     pub const SEND_QUERY_PACKET: u64 = 1;
 }

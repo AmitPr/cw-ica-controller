@@ -107,6 +107,7 @@ pub fn reply(deps: DepsMut, _env: Env, msg: Reply) -> Result<Response, ContractE
             )?;
 
             match msg.id {
+                keys::reply_ids::SEND_PACKET => Ok(Response::default()),
                 keys::reply_ids::SEND_QUERY_PACKET => {
                     let query_paths = state::QUERY.load(deps.storage)?;
 
@@ -274,7 +275,7 @@ mod execute {
         let send_packet_submsg = if has_queries {
             SubMsg::reply_on_success(send_packet_msg, keys::reply_ids::SEND_QUERY_PACKET)
         } else {
-            SubMsg::new(send_packet_msg)
+            SubMsg::reply_on_success(send_packet_msg, keys::reply_ids::SEND_PACKET)
         };
 
         Ok(Response::default().add_submessage(send_packet_submsg))
